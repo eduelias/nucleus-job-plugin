@@ -11,6 +11,10 @@ An **unofficial**, community **Rust runner for AWS IoT Jobs** on a Greengrass de
 > ⚠️ **Not affiliated with, endorsed by, or sponsored by Amazon.** "AWS IoT", "Greengrass", and
 > "IoT Jobs" are used descriptively/nominatively.
 
+> 🔗 **Related:** reaches AWS IoT Core through the nucleus's own connection using
+> [`greengrass-ipc`](https://github.com/eduelias/greengrass-ipc) — a pure-Rust Greengrass IPC client
+> (also on [crates.io](https://crates.io/crates/greengrass-ipc)).
+
 ## What it does
 
 - Speaks the **AWS IoT Jobs MQTT protocol** (`$aws/things/{thingName}/jobs/...`).
