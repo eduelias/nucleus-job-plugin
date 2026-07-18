@@ -1,7 +1,7 @@
 {
   "RecipeFormatVersion": "2020-01-25",
   "ComponentName": "dev.du7.nucleus-job-plugin",
-  "ComponentVersion": "0.1.0",
+  "ComponentVersion": "{COMPONENT_VERSION}",
   "ComponentType": "aws.greengrass.generic",
   "ComponentDescription": "Unofficial Rust runner for AWS IoT Jobs execution, incl. AWS managed job templates (community, not affiliated with Amazon).",
   "ComponentPublisher": "eduelias",
@@ -16,16 +16,9 @@
       "logLevel": "info",
       "handlerDir": "/var/lib/nucleus-job-plugin/handlers",
       "jobTimeoutSecs": "300",
-      "includeStdout": "0",
+      "includeStdout": "1",
       "installSampleHandlers": "1",
-      "handlerPathOverrides": "",
-      "commandAllowList": "",
-      "iotEndpoint": "",
-      "iotPort": "8883",
-      "mqttClientId": "",
-      "certPath": "",
-      "keyPath": "",
-      "caPath": "",
+      "transport": "ipc",
       "accessControl": {
         "aws.greengrass.ipc.mqttproxy": {
           "dev.du7.nucleus-job-plugin:mqttproxy:1": {
@@ -35,7 +28,8 @@
               "aws.greengrass#SubscribeToIoTCore"
             ],
             "resources": [
-              "$aws/things/${iot:thingName}/jobs/*"
+              "$aws/things/${iot:thingName}/jobs/*",
+              "$aws/things/${iot:thingName}/jobs/#"
             ]
           }
         }
@@ -50,7 +44,7 @@
       "Lifecycle": {
         "Install": {
           "RequiresPrivilege": true,
-          "Script": "/usr/bin/bash {artifacts:path}/setup.sh {artifacts:path} {configuration:/handlerDir} {configuration:/installSampleHandlers}"
+          "Script": "/usr/bin/bash {artifacts:path}/setup.sh {artifacts:path} {configuration:/handlerDir} {configuration:/installSampleHandlers} {artifacts:decompressedPath}/handlers/handlers"
         },
         "Startup": {
           "RequiresPrivilege": true,
@@ -60,19 +54,26 @@
             "HANDLER_DIR": "{configuration:/handlerDir}",
             "JOB_TIMEOUT_SECS": "{configuration:/jobTimeoutSecs}",
             "INCLUDE_STDOUT": "{configuration:/includeStdout}",
-            "HANDLER_PATH_OVERRIDES": "{configuration:/handlerPathOverrides}",
-            "COMMAND_ALLOW_LIST": "{configuration:/commandAllowList}",
-            "IOT_ENDPOINT": "{configuration:/iotEndpoint}",
-            "IOT_PORT": "{configuration:/iotPort}",
-            "MQTT_CLIENT_ID": "{configuration:/mqttClientId}",
-            "CERT_PATH": "{configuration:/certPath}",
-            "KEY_PATH": "{configuration:/keyPath}",
-            "CA_PATH": "{configuration:/caPath}"
+            "TRANSPORT": "{configuration:/transport}"
           },
           "Script": "/usr/local/bin/nucleus-job-plugin"
         }
       },
-      "Artifacts": []
+      "Artifacts": [
+        {
+          "Uri": "s3://BUCKET_NAME/dev.du7.nucleus-job-plugin/COMPONENT_VERSION/nucleus-job-plugin",
+          "Permission": { "Read": "ALL", "Execute": "ALL" }
+        },
+        {
+          "Uri": "s3://BUCKET_NAME/dev.du7.nucleus-job-plugin/COMPONENT_VERSION/setup.sh",
+          "Permission": { "Read": "ALL" }
+        },
+        {
+          "Uri": "s3://BUCKET_NAME/dev.du7.nucleus-job-plugin/COMPONENT_VERSION/handlers.zip",
+          "Unarchive": "ZIP",
+          "Permission": { "Read": "ALL", "Execute": "ALL" }
+        }
+      ]
     }
   ]
 }

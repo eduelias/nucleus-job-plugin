@@ -143,11 +143,34 @@ publishes.
 ## Deploying as a Greengrass component
 
 The component (`dev.du7.nucleus-job-plugin`) is a generic component with a soft nucleus dependency.
-See [`greengrass/recipe.json`](greengrass/recipe.json) and
-[`greengrass/files/setup.sh`](greengrass/files/setup.sh). The Install step installs the binary, creates
-the handler allow-list directory owned by the component user, and (by default) installs the bundled
-AWS sample job handlers so managed templates work immediately. For the direct-MQTT transport, supply
-the device credentials via the component configuration.
+The recipe template ([`recipe.json`](recipe.json)) and Install script
+([`greengrass/files/setup.sh`](greengrass/files/setup.sh)) install the binary, create the handler
+allow-list directory owned by the component user, and (by default) install the bundled AWS sample job
+handlers so managed templates work immediately.
+
+Build, publish, and deploy with the [GDK CLI](https://docs.aws.amazon.com/greengrass/v2/developerguide/greengrass-development-kit-cli.html)
+(config in [`gdk-config.json`](gdk-config.json)):
+
+```bash
+# 1. Build: cross-compiles the aarch64 binary in a container and stages artifacts
+#    (see greengrass/build-custom.sh).
+gdk component build
+
+# 2. Publish: uploads artifacts to S3 and creates the next component version.
+#    --bucket pins the existing artifact bucket (otherwise GDK appends -region-account).
+AWS_PROFILE=<profile> AWS_REGION=<region> gdk component publish --bucket <artifact-bucket>
+
+# 3. Deploy to a device (create-deployment + wait for RUNNING).
+AWS_PROFILE=<profile> AWS_REGION=<region> greengrass/deploy.sh <version> <thing-name>
+```
+
+The build runs in a container via `podman` by default (override with `CONTAINER_ENGINE=docker`). For
+the direct-MQTT transport instead of IPC, set `transport: mqtt` in the component configuration and
+supply the device credentials.
+
+> Validated on hardware end-to-end: GDK-built `dev.du7.nucleus-job-plugin` deployed to a Greengrass
+> core device (nucleus 2.17, aarch64), and an `AWS-Restart-Application` managed-template job delivered
+> over IPC runs the bundled handler and reaches `SUCCEEDED` in the cloud.
 
 ## License
 

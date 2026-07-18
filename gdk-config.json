@@ -1,0 +1,22 @@
+{
+  "component": {
+    "dev.du7.nucleus-job-plugin": {
+      "author": "eduelias",
+      "version": "NEXT_PATCH",
+      "build": {
+        "build_system": "custom",
+        "custom_build_command": [
+          "bash",
+          "greengrass/build-custom.sh",
+          "dev.du7.nucleus-job-plugin",
+          "NEXT_PATCH"
+        ]
+      },
+      "publish": {
+        "bucket": "dev-aple-ggv2-components",
+        "region": "eu-west-1"
+      }
+    }
+  },
+  "gdk_version": "1.6.0"
+}

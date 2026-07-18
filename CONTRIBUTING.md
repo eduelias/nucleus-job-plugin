@@ -14,6 +14,23 @@ Thanks for your interest! This is an unofficial, community project. Contribution
   This runs `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test`, and `cargo doc` — the same
   gates as CI.
 
+## Component build / deploy (GDK)
+
+Packaging uses the [GDK CLI](https://docs.aws.amazon.com/greengrass/v2/developerguide/greengrass-development-kit-cli.html)
+(`gdk-config.json`). The custom build (`greengrass/build-custom.sh`) cross-compiles the aarch64 binary
+in a container (`podman` by default; `CONTAINER_ENGINE=docker` to override) and stages the binary,
+`setup.sh`, and the sample-handlers zip into `greengrass-build/`.
+
+```bash
+gdk component build                                   # cross-compile + stage
+gdk component publish --bucket <artifact-bucket>      # upload + create next version
+greengrass/deploy.sh <version> <thing-name>           # deploy + wait for RUNNING
+```
+
+`recipe.json` at the repo root is the GDK recipe template (`{COMPONENT_VERSION}` and the S3
+`BUCKET_NAME`/`COMPONENT_VERSION` tokens are filled in at publish). `greengrass-build/` is generated
+and git-ignored.
+
 ## Guidelines
 
 - **Do not guess Jobs wire details.** The IoT Jobs MQTT topics and payload shapes are captured, with

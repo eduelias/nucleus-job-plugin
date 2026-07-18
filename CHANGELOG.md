@@ -31,3 +31,6 @@ All notable changes to this project are documented here. The format is based on
   - Generic component `dev.du7.nucleus-job-plugin` with a soft nucleus dependency, `mqttproxy`
     authorization for the reserved jobs topics, environment-based configuration, `local_run` example,
     and an Install script that provisions the binary + handler directory + sample handlers.
+  - GDK CLI packaging (`gdk-config.json`, root `recipe.json` template,
+    `greengrass/build-custom.sh` for containerized aarch64 cross-compilation) plus a
+    `greengrass/deploy.sh` helper for `create-deployment` + on-device verification.
