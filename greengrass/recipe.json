@@ -1,0 +1,64 @@
+{
+  "RecipeFormatVersion": "2020-01-25",
+  "ComponentName": "io.github.eduelias.nucleus-job-plugin",
+  "ComponentVersion": "0.1.0",
+  "ComponentType": "aws.greengrass.generic",
+  "ComponentDescription": "Unofficial Rust runner for AWS IoT Jobs execution (community, not affiliated with Amazon).",
+  "ComponentPublisher": "eduelias",
+  "ComponentConfiguration": {
+    "DefaultConfiguration": {
+      "logLevel": "info",
+      "handlerDir": "/var/lib/nucleus-job-plugin/handlers",
+      "jobTimeoutSecs": "300",
+      "includeStdout": "0",
+      "iotEndpoint": "",
+      "iotPort": "8883",
+      "certPath": "",
+      "keyPath": "",
+      "caPath": "",
+      "accessControl": {
+        "aws.greengrass.ipc.mqttproxy": {
+          "io.github.eduelias.nucleus-job-plugin:mqttproxy:1": {
+            "policyDescription": "Allow the runner to speak the reserved IoT Jobs topics for this thing.",
+            "operations": [
+              "aws.greengrass#PublishToIoTCore",
+              "aws.greengrass#SubscribeToIoTCore"
+            ],
+            "resources": [
+              "$aws/things/${iot:thingName}/jobs/*"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "Manifests": [
+    {
+      "Platform": {
+        "os": "linux"
+      },
+      "Lifecycle": {
+        "Install": {
+          "RequiresPrivilege": true,
+          "Script": "/usr/bin/bash {artifacts:path}/setup.sh {artifacts:path} {configuration:/handlerDir}"
+        },
+        "Startup": {
+          "Setenv": {
+            "RUST_LOG": "nucleus_job_plugin={configuration:/logLevel}",
+            "THING_NAME": "{iot:thingName}",
+            "HANDLER_DIR": "{configuration:/handlerDir}",
+            "JOB_TIMEOUT_SECS": "{configuration:/jobTimeoutSecs}",
+            "INCLUDE_STDOUT": "{configuration:/includeStdout}",
+            "IOT_ENDPOINT": "{configuration:/iotEndpoint}",
+            "IOT_PORT": "{configuration:/iotPort}",
+            "CERT_PATH": "{configuration:/certPath}",
+            "KEY_PATH": "{configuration:/keyPath}",
+            "CA_PATH": "{configuration:/caPath}"
+          },
+          "Script": "/usr/local/bin/nucleus-job-plugin"
+        }
+      },
+      "Artifacts": []
+    }
+  ]
+}
