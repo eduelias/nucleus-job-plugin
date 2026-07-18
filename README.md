@@ -1,5 +1,9 @@
 # nucleus-job-plugin
 
+<p align="center">
+  <img src="docs/social-card.png" alt="nucleus-job-plugin — AWS IoT Jobs execution for Greengrass, without clashing with the Greengrass nucleus" width="100%">
+</p>
+
 An **unofficial**, community **Rust runner for AWS IoT Jobs** on a Greengrass device. It mirrors the
 *Jobs* feature of the [`aws-iot-device-client`](https://github.com/awslabs/aws-iot-device-client) —
 **job execution only**.
