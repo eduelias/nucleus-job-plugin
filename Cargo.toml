@@ -2,7 +2,7 @@
 name = "nucleus-job-plugin"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.82"
+rust-version = "1.94.1"
 license = "Apache-2.0 OR MIT"
 description = "Unofficial Rust runner for AWS IoT Jobs on a Greengrass device (job execution only). Not affiliated with Amazon."
 repository = "https://github.com/eduelias/nucleus-job-plugin"
