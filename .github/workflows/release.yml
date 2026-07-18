@@ -1,0 +1,59 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build aarch64 binary and publish release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install aarch64 cross toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+          rustup target add aarch64-unknown-linux-gnu
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build release binary (aarch64-unknown-linux-gnu)
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+        run: cargo build --release --locked --all-features --target aarch64-unknown-linux-gnu
+
+      - name: Package artifacts
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          STAGE="dist"
+          mkdir -p "$STAGE/handlers"
+          cp target/aarch64-unknown-linux-gnu/release/nucleus-job-plugin "$STAGE/"
+          aarch64-linux-gnu-strip "$STAGE/nucleus-job-plugin" || true
+          cp greengrass/files/setup.sh "$STAGE/"
+          cp greengrass/files/handlers/*.sh "$STAGE/handlers/"
+          cp recipe.json "$STAGE/recipe.json"
+          ( cd "$STAGE" && zip -rq handlers.zip handlers && rm -rf handlers )
+          ( cd "$STAGE" && tar czf "../nucleus-job-plugin-${VERSION}-aarch64-linux.tar.gz" . )
+          ls -la "$STAGE" ./*.tar.gz
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            nucleus-job-plugin-*-aarch64-linux.tar.gz
+          generate_release_notes: true
+          body: |
+            Unofficial Rust runner for AWS IoT Jobs execution as a Greengrass generic component.
+
+            The attached `*-aarch64-linux.tar.gz` contains the `aarch64` binary, `setup.sh`,
+            `handlers.zip` (AWS sample job handlers), and `recipe.json`. See the README for how to
+            publish/deploy the component (GDK or manual).
+
+            > Unofficial — not affiliated with, endorsed by, or sponsored by Amazon.

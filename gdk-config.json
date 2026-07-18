@@ -13,8 +13,8 @@
         ]
       },
       "publish": {
-        "bucket": "dev-aple-ggv2-components",
-        "region": "eu-west-1"
+        "bucket": "greengrass-component-artifacts",
+        "region": "us-east-1"
       }
     }
   },

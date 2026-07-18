@@ -34,7 +34,7 @@ and git-ignored.
 ## Guidelines
 
 - **Do not guess Jobs wire details.** The IoT Jobs MQTT topics and payload shapes are captured, with
-  sources, in `.opencode/skills/nucleus-job-plugin-dev/reference/JOBS_PROTOCOL.md`. Implement against
+  sources, in [`docs/JOBS_PROTOCOL.md`](docs/JOBS_PROTOCOL.md). Implement against
   it and match JSON field names exactly.
 - **Keep the scope tight:** IoT Jobs *execution* only. No OTA/file-download jobs, provisioning,
   tunneling, or defender.

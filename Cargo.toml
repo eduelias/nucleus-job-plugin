@@ -9,7 +9,7 @@ repository = "https://github.com/eduelias/nucleus-job-plugin"
 readme = "README.md"
 keywords = ["iot", "jobs", "greengrass", "mqtt", "aws"]
 categories = ["embedded", "network-programming"]
-exclude = [".github/", ".opencode/", "greengrass/", "scripts/"]
+exclude = [".github/", "greengrass/", "scripts/"]
 
 [features]
 # The core engine/model/handler are transport-agnostic and always available.

@@ -1,0 +1,60 @@
+name: Bug report
+description: Report a problem with the jobs runner
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. This is an unofficial, community project — please provide enough
+        detail to reproduce the issue.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug and what you expected instead.
+    validations:
+      required: true
+  - type: dropdown
+    id: transport
+    attributes:
+      label: Transport
+      options:
+        - ipc (Greengrass IPC)
+        - mqtt (direct MQTT)
+    validations:
+      required: true
+  - type: textarea
+    id: job-doc
+    attributes:
+      label: Job document / template
+      description: The job document or AWS managed template used (redact any secrets/URLs).
+      render: json
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Component / crate version
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: input
+    id: nucleus-version
+    attributes:
+      label: Greengrass nucleus version
+      placeholder: "2.17.0"
+  - type: input
+    id: env
+    attributes:
+      label: Device platform
+      placeholder: "aarch64 Fedora IoT (glibc 2.42)"
+  - type: textarea
+    id: logs
+    attributes:
+      label: Component logs
+      description: From the component log. Please redact tokens, ARNs, thing names, and account IDs.
+      render: text

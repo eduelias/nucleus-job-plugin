@@ -1,0 +1,21 @@
+name: Feature request
+description: Suggest a capability for the jobs runner
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the use case or missing capability.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed approach
+      description: Optional — how you imagine it working.
+  - type: markdown
+    attributes:
+      value: |
+        Note: this project's scope is **IoT Jobs execution only**. Out of scope by design: OTA /
+        jobs-with-file-download, fleet provisioning, secure tunneling, device defender, and shadows.

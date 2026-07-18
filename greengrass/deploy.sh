@@ -11,8 +11,8 @@
 #   TARGET_THING               default thing name if not passed as $2
 #
 # Examples:
-#   AWS_PROFILE=pnl-apl-dev-elevated AWS_REGION=eu-west-1 \
-#     greengrass/deploy.sh 0.1.5 fp_777007_000000007bac5a8e
+#   AWS_PROFILE=my-profile AWS_REGION=us-east-1 \
+#     greengrass/deploy.sh 0.1.5 MyGreengrassCoreThing
 set -euo pipefail
 
 COMPONENT_NAME="dev.du7.nucleus-job-plugin"

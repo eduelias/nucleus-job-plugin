@@ -1,6 +1,6 @@
 //! JSON shapes for the AWS IoT Jobs MQTT protocol and the job document.
 //!
-//! Field names follow the AWS IoT Jobs API (see `reference/JOBS_PROTOCOL.md`).
+//! Field names follow the AWS IoT Jobs API (see `docs/JOBS_PROTOCOL.md`).
 //! Parsing is intentionally lenient (unknown fields ignored) so new service or
 //! job-document fields don't break the runner.
 

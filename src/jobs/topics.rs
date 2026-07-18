@@ -1,7 +1,7 @@
 //! Builders for the reserved AWS IoT Jobs MQTT topics.
 //!
 //! All topics are prefixed with `$aws/things/{thingName}/jobs/`. See
-//! `reference/JOBS_PROTOCOL.md` for the authoritative list.
+//! `docs/JOBS_PROTOCOL.md` for the authoritative list.
 
 /// Builds the reserved Jobs topic strings for a single thing.
 #[derive(Debug, Clone)]
