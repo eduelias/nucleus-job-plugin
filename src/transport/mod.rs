@@ -12,6 +12,9 @@ use tokio::sync::mpsc;
 #[cfg(feature = "mqtt")]
 pub mod mqtt;
 
+#[cfg(feature = "ipc")]
+pub mod ipc;
+
 pub mod mock;
 
 /// An MQTT message received from a subscribed topic.

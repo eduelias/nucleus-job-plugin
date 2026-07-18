@@ -71,7 +71,8 @@ async fn runs_a_job_end_to_end_and_reports_succeeded() {
 
     let first: serde_json::Value = serde_json::from_slice(&updates[0].payload).unwrap();
     assert_eq!(first["status"], "IN_PROGRESS");
-    assert_eq!(first["expectedVersion"], 3);
+    // expectedVersion is intentionally not sent (single-owner runner).
+    assert!(first.get("expectedVersion").is_none());
 
     let second: serde_json::Value = serde_json::from_slice(&updates[1].payload).unwrap();
     assert_eq!(second["status"], "SUCCEEDED");
@@ -115,4 +116,48 @@ async fn invalid_job_document_reports_failed_without_running() {
     assert_eq!(updates.len(), 1, "only the FAILED update expected");
     let body: serde_json::Value = serde_json::from_slice(&updates[0].payload).unwrap();
     assert_eq!(body["status"], "FAILED");
+}
+
+#[tokio::test]
+async fn same_job_delivered_twice_is_processed_once() {
+    // Each status update mutates the pending list and re-triggers notify-next; the
+    // engine must not reprocess a job it has already handled.
+    let tmp = tempfile::tempdir().unwrap();
+    write_handler(tmp.path(), "ok.sh", "#!/bin/sh\nexit 0\n");
+    let (transport, handle) = MockTransport::new();
+    let runner = HandlerRunner::new(tmp.path().to_path_buf(), Duration::from_secs(5));
+    let engine = Engine::new(transport, THING, runner);
+
+    let topics = JobTopics::new(THING);
+    let h = handle.clone();
+    let notify = topics.notify_next();
+    let accepted = topics.start_next_accepted();
+    tokio::spawn(async move {
+        let job = serde_json::json!({
+            "execution": {
+                "jobId": "dup-1", "thingName": THING,
+                "jobDocument": {"operation": "ok.sh"},
+                "status": "QUEUED", "versionNumber": 1, "executionNumber": 1
+            }
+        });
+        tokio::time::sleep(Duration::from_millis(40)).await;
+        // Deliver the same job three times through different topics.
+        h.inject(&accepted, job.clone()).await;
+        h.inject(&notify, job.clone()).await;
+        h.inject(&notify, job).await;
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    });
+
+    let _ = tokio::time::timeout(Duration::from_secs(2), engine.run()).await;
+
+    // Exactly one IN_PROGRESS + one SUCCEEDED update for the single job.
+    let pubs = handle.published();
+    let update_topic = topics.update("dup-1");
+    let updates: Vec<_> = pubs.iter().filter(|p| p.topic == update_topic).collect();
+    assert_eq!(
+        updates.len(),
+        2,
+        "job should be processed once: IN_PROGRESS + SUCCEEDED only, got {}",
+        updates.len()
+    );
 }

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Install step (privileged) for the nucleus-job-plugin generic Greengrass component.
 #
-# Usage: setup.sh <artifacts_path> <handler_dir> [install_sample_handlers]
+# Usage: setup.sh <artifacts_path> <handler_dir> [install_sample_handlers] [handlers_src_dir]
 #
 # * installs the native binary to /usr/local/bin
 # * creates the allow-list handler directory owned by the component run-user
@@ -9,12 +9,14 @@
 #
 # The binary must be shipped alongside this script as an artifact named
 # `nucleus-job-plugin` (built for the target architecture). The sample handlers,
-# when installed, come from the `handlers/` directory next to this script.
+# when installed, come from <handlers_src_dir> (default: `handlers/` next to this
+# script) — override it when the handlers ship as a separate (unarchived) artifact.
 set -euo pipefail
 
 ARTIFACTS_PATH="${1:?artifacts path required}"
 HANDLER_DIR="${2:-/var/lib/nucleus-job-plugin/handlers}"
 INSTALL_SAMPLE_HANDLERS="${3:-1}"
+HANDLERS_SRC="${4:-${ARTIFACTS_PATH}/handlers}"
 
 # The Greengrass default component run-user/group. Override if your nucleus uses
 # a different runWith user.
@@ -33,9 +35,9 @@ mkdir -p "${HANDLER_DIR}"
 chown "${RUN_USER}:${RUN_GROUP}" "${HANDLER_DIR}"
 chmod 0750 "${HANDLER_DIR}"
 
-if [ "${INSTALL_SAMPLE_HANDLERS}" = "1" ] && [ -d "${ARTIFACTS_PATH}/handlers" ]; then
-  echo "[setup] installing AWS sample job handlers into ${HANDLER_DIR}"
-  for h in "${ARTIFACTS_PATH}"/handlers/*.sh; do
+if [ "${INSTALL_SAMPLE_HANDLERS}" = "1" ] && [ -d "${HANDLERS_SRC}" ]; then
+  echo "[setup] installing AWS sample job handlers from ${HANDLERS_SRC} into ${HANDLER_DIR}"
+  for h in "${HANDLERS_SRC}"/*.sh; do
     [ -e "$h" ] || continue
     install -m 0750 -o "${RUN_USER}" -g "${RUN_GROUP}" "$h" "${HANDLER_DIR}/$(basename "$h")"
   done

@@ -22,6 +22,7 @@
       "commandAllowList": "",
       "iotEndpoint": "",
       "iotPort": "8883",
+      "mqttClientId": "",
       "certPath": "",
       "keyPath": "",
       "caPath": "",
@@ -52,6 +53,7 @@
           "Script": "/usr/bin/bash {artifacts:path}/setup.sh {artifacts:path} {configuration:/handlerDir} {configuration:/installSampleHandlers}"
         },
         "Startup": {
+          "RequiresPrivilege": true,
           "Setenv": {
             "RUST_LOG": "nucleus_job_plugin={configuration:/logLevel}",
             "THING_NAME": "{iot:thingName}",
@@ -62,6 +64,7 @@
             "COMMAND_ALLOW_LIST": "{configuration:/commandAllowList}",
             "IOT_ENDPOINT": "{configuration:/iotEndpoint}",
             "IOT_PORT": "{configuration:/iotPort}",
+            "MQTT_CLIENT_ID": "{configuration:/mqttClientId}",
             "CERT_PATH": "{configuration:/certPath}",
             "KEY_PATH": "{configuration:/keyPath}",
             "CA_PATH": "{configuration:/caPath}"

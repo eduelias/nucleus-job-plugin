@@ -14,9 +14,11 @@ exclude = [".github/", ".opencode/", "greengrass/", "scripts/"]
 [features]
 # The core engine/model/handler are transport-agnostic and always available.
 # Transports are opt-in so the crate builds with no network deps by default.
-default = ["mqtt"]
+default = ["mqtt", "ipc"]
 # Direct MQTT transport to AWS IoT Core via the device certificate (rumqttc + rustls).
 mqtt = ["dep:rumqttc"]
+# Greengrass IPC transport: reuse the nucleus's MQTT connection via the greengrass-ipc SDK.
+ipc = ["dep:greengrass-ipc"]
 
 [dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "time", "sync", "io-util"] }
@@ -30,6 +32,7 @@ futures = "0.3"
 
 # Optional transports.
 rumqttc = { version = "0.24", optional = true }
+greengrass-ipc = { git = "https://github.com/eduelias/greengrass-ipc", optional = true }
 
 [target.'cfg(unix)'.dependencies]
 # Resolve `runAsUser` names to uid/gid for privilege drop on Linux devices.

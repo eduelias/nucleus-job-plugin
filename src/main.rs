@@ -28,6 +28,21 @@ async fn main() -> Result<()> {
     runner.command_allow_list = cfg.command_allow_list.clone();
 
     match cfg.transport {
+        TransportKind::Ipc => {
+            #[cfg(feature = "ipc")]
+            {
+                let transport = nucleus_job_plugin::transport::ipc::IpcTransport::connect().await?;
+                let engine = Engine::new(transport, &cfg.thing_name, runner);
+                engine.run().await?;
+            }
+            #[cfg(not(feature = "ipc"))]
+            {
+                let _ = runner;
+                return Err(Error::Config(
+                    "IPC transport selected but the `ipc` feature is disabled".into(),
+                ));
+            }
+        }
         TransportKind::Mqtt => {
             #[cfg(feature = "mqtt")]
             {
@@ -37,7 +52,7 @@ async fn main() -> Result<()> {
                     .ok_or_else(|| Error::Config("MQTT transport selected but IOT_ENDPOINT/CERT_PATH/KEY_PATH/CA_PATH not set".into()))?;
                 let transport = nucleus_job_plugin::transport::mqtt::MqttTransport::connect(
                     mqtt,
-                    &cfg.thing_name,
+                    &mqtt.client_id,
                 )?;
                 let engine = Engine::new(transport, &cfg.thing_name, runner);
                 engine.run().await?;

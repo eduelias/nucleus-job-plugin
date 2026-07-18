@@ -7,6 +7,8 @@ use std::time::Duration;
 /// Which transport to use to reach AWS IoT Core.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TransportKind {
+    /// Greengrass IPC: reuse the nucleus's MQTT connection (no device cert).
+    Ipc,
     /// Direct MQTT over TLS using the device certificate.
     Mqtt,
 }
@@ -24,6 +26,10 @@ pub struct MqttConfig {
     pub key_path: PathBuf,
     /// Path to the Amazon Root CA (PEM).
     pub ca_path: PathBuf,
+    /// MQTT client id. Must be **distinct from the Greengrass nucleus's client id**
+    /// (the thing name) when reusing the device certificate, otherwise the broker
+    /// disconnects one of the two colliding clients. Defaults to `{thing}-jobs`.
+    pub client_id: String,
 }
 
 /// Full runner configuration.
@@ -56,6 +62,7 @@ impl Config {
     /// * `HANDLER_DIR` (default `/var/lib/nucleus-job-plugin/handlers`)
     /// * `JOB_TIMEOUT_SECS` (default 300)
     /// * `INCLUDE_STDOUT` (`1`/`true` to enable)
+    /// * `TRANSPORT` (`ipc` (default) or `mqtt`)
     /// * `HANDLER_PATH_OVERRIDES` (comma-separated extra dirs a job `path` may use)
     /// * `COMMAND_ALLOW_LIST` (comma-separated allow-list for `runCommand`)
     /// * MQTT: `IOT_ENDPOINT`, `IOT_PORT` (default 8883), `CERT_PATH`, `KEY_PATH`, `CA_PATH`
@@ -94,8 +101,20 @@ impl Config {
                 cert_path: require_env("CERT_PATH")?.into(),
                 key_path: require_env("KEY_PATH")?.into(),
                 ca_path: require_env("CA_PATH")?.into(),
+                client_id: env("MQTT_CLIENT_ID").unwrap_or_else(|| format!("{thing_name}-jobs")),
             }),
             None => None,
+        };
+
+        // Transport selection: default to Greengrass IPC (no device cert needed).
+        let transport = match env("TRANSPORT").as_deref() {
+            Some("mqtt") => TransportKind::Mqtt,
+            Some("ipc") | None => TransportKind::Ipc,
+            Some(other) => {
+                return Err(Error::Config(format!(
+                    "unknown TRANSPORT {other:?} (expected `ipc` or `mqtt`)"
+                )))
+            }
         };
 
         Ok(Self {
@@ -105,7 +124,7 @@ impl Config {
             include_stdout,
             allowed_path_overrides,
             command_allow_list,
-            transport: TransportKind::Mqtt,
+            transport,
             mqtt,
         })
     }

@@ -22,8 +22,12 @@ All notable changes to this project are documented here. The format is based on
   - Allow-listed handler execution: bare-name resolution inside a configured directory, path-traversal
     rejection, allow-listed `path` overrides, bounded timeout, output capture, exit-code → status
     mapping.
-  - `JobsTransport` trait with a direct-MQTT implementation (`rumqttc`, feature `mqtt`) and an
-    in-memory mock for tests.
+  - `JobsTransport` trait with a Greengrass-IPC implementation (default, feature `ipc`, via the
+    `greengrass-ipc` SDK — reuses the nucleus's MQTT connection, no device cert), a direct-MQTT
+    implementation (`rumqttc`, feature `mqtt`), and an in-memory mock for tests.
+  - Engine hardening: per-session job de-duplication so a job is processed exactly once even though
+    each status update re-triggers `notify-next`; terminal updates omit `expectedVersion` to avoid
+    `VersionMismatch` leaving a job stuck `IN_PROGRESS`.
   - Generic component `dev.du7.nucleus-job-plugin` with a soft nucleus dependency, `mqttproxy`
     authorization for the reserved jobs topics, environment-based configuration, `local_run` example,
     and an Install script that provisions the binary + handler directory + sample handlers.

@@ -21,6 +21,10 @@ pub struct Engine<T: JobsTransport> {
     topics: JobTopics,
     runner: HandlerRunner,
     client_token: String,
+    /// Job ids that are in-flight or already finished this session, so the same
+    /// job is never processed twice (each status update mutates the pending list
+    /// and re-triggers `notify-next`, which would otherwise re-enter processing).
+    seen: std::sync::Mutex<std::collections::HashSet<String>>,
 }
 
 impl<T: JobsTransport> Engine<T> {
@@ -31,7 +35,14 @@ impl<T: JobsTransport> Engine<T> {
             topics: JobTopics::new(thing_name),
             runner,
             client_token: "nucleus-job-plugin".to_string(),
+            seen: std::sync::Mutex::new(std::collections::HashSet::new()),
         }
+    }
+
+    /// Claim a job id for processing. Returns `false` if it is already in-flight or
+    /// finished this session (so the caller should skip it).
+    fn claim(&self, job_id: &str) -> bool {
+        self.seen.lock().unwrap().insert(job_id.to_string())
     }
 
     /// Subscribe to the topics the engine listens on.
@@ -119,6 +130,11 @@ impl<T: JobsTransport> Engine<T> {
 
     /// Full processing of one job: in-progress → run handler → terminal status.
     async fn process_job(&self, job: JobExecutionData) -> Result<()> {
+        // De-duplicate: skip jobs already in-flight or finished this session.
+        if !self.claim(&job.job_id) {
+            debug!(job_id = %job.job_id, "job already handled; skipping");
+            return Ok(());
+        }
         info!(job_id = %job.job_id, "picked up job");
 
         // Parse the handler action up front; a bad document fails the job.
@@ -150,13 +166,15 @@ impl<T: JobsTransport> Engine<T> {
         };
 
         info!(job_id = %job.job_id, status = ?outcome.status, "job finished");
-        self.update(&job, outcome.status, outcome.details).await?;
-
-        // Ask for the next one.
-        self.request_next().await
+        self.update(&job, outcome.status, outcome.details).await
     }
 
-    /// Publish an UpdateJobExecution with optimistic-concurrency version.
+    /// Publish an UpdateJobExecution.
+    ///
+    /// We intentionally do **not** send `expectedVersion`: a single runner owns the
+    /// execution, and each update (e.g. `IN_PROGRESS`) increments the server-side
+    /// version, so echoing the original version on the terminal update would be
+    /// rejected as a `VersionMismatch` and leave the job stuck `IN_PROGRESS`.
     async fn update(
         &self,
         job: &JobExecutionData,
@@ -166,7 +184,7 @@ impl<T: JobsTransport> Engine<T> {
         let req = UpdateRequest {
             status,
             status_details,
-            expected_version: Some(job.version_number),
+            expected_version: None,
             execution_number: job.execution_number,
             client_token: Some(self.client_token.clone()),
         };

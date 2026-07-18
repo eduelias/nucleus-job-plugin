@@ -40,7 +40,7 @@ declares a soft dependency on the Greengrass nucleus (`>=2.0.0 <3.0.0`).
 | `jobs::topics` | reserved `$aws/things/{thing}/jobs/...` topic builders |
 | `jobs::engine` | the workflow state machine |
 | `handler` | action execution: allow-listed `runHandler` + `runCommand`, timeout, capture, status map |
-| `transport` | the `JobsTransport` trait + a direct-MQTT impl (`rumqttc`) and an in-memory mock |
+| `transport` | the `JobsTransport` trait + a Greengrass-IPC impl (default), a direct-MQTT impl (`rumqttc`), and an in-memory mock |
 
 The engine is transport-agnostic, so the whole workflow is unit-tested with a mock transport and fake
 handler scripts — no network or AWS account required.
@@ -110,11 +110,26 @@ handlers** (Apache-2.0) implement the device side:
 | `HANDLER_DIR` | `/var/lib/nucleus-job-plugin/handlers` | allow-list directory of handlers |
 | `JOB_TIMEOUT_SECS` | `300` | default per-job handler timeout |
 | `INCLUDE_STDOUT` | *(off)* | `1`/`true` to include stdout in `statusDetails` |
+| `TRANSPORT` | `ipc` | `ipc` (Greengrass IPC, recommended) or `mqtt` (direct MQTT) |
 | `HANDLER_PATH_OVERRIDES` | *(none)* | comma-separated extra dirs a job `path` may use |
 | `COMMAND_ALLOW_LIST` | *(any)* | comma-separated allow-list for `runCommand` executables |
-| `IOT_ENDPOINT` | *(required for MQTT)* | `xxxx-ats.iot.<region>.amazonaws.com` |
-| `IOT_PORT` | `8883` | MQTT port |
-| `CERT_PATH` / `KEY_PATH` / `CA_PATH` | *(required for MQTT)* | device cert, key, Amazon Root CA |
+| `IOT_ENDPOINT` | *(required for `mqtt`)* | `xxxx-ats.iot.<region>.amazonaws.com` |
+| `IOT_PORT` | `8883` | MQTT port (direct MQTT only) |
+| `MQTT_CLIENT_ID` | `{thing}-jobs` | MQTT client id (direct MQTT only); must differ from the nucleus's |
+| `CERT_PATH` / `KEY_PATH` / `CA_PATH` | *(required for `mqtt`)* | device cert, key, Amazon Root CA |
+
+## Transports
+
+- **`ipc` (default, recommended):** reuse the nucleus's own MQTT connection via `SubscribeToIoTCore` /
+  `PublishToIoTCore` (the [`greengrass-ipc`](https://github.com/eduelias/greengrass-ipc) SDK). No
+  device certificate and no second MQTT connection — the component is authorized for the Jobs topics
+  through an `aws.greengrass.ipc.mqttproxy` policy in its recipe (`$aws/things/${iot:thingName}/jobs/*`).
+- **`mqtt`:** open a dedicated MQTT/TLS connection with a device certificate. Use a `MQTT_CLIENT_ID`
+  distinct from the nucleus and a certificate whose IoT policy allows the reserved jobs topics.
+
+> Validated on hardware: an `AWS-Restart-Application` managed-template job deployed to a Greengrass
+> core device (nucleus 2.17, aarch64) is delivered over IPC, runs the bundled handler, and reaches
+> `SUCCEEDED` in the cloud.
 
 ## Try it locally (no AWS)
 
