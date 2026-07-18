@@ -32,7 +32,7 @@ futures = "0.3"
 
 # Optional transports.
 rumqttc = { version = "0.24", optional = true }
-greengrass-ipc = { git = "https://github.com/eduelias/greengrass-ipc", optional = true }
+greengrass-ipc = { version = "0.1", optional = true }
 
 [target.'cfg(unix)'.dependencies]
 # Resolve `runAsUser` names to uid/gid for privilege drop on Linux devices.
