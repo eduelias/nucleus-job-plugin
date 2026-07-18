@@ -28,6 +28,10 @@ ships a standalone binary as a **generic component** (`aws.greengrass.generic`).
 **Out of scope** (by design): OTA / jobs-with-file-download, fleet provisioning, secure tunneling,
 device defender, config shadow. This mirrors *only* the device client's Jobs feature.
 
+Like the AWS `aws.greengrass.SecureTunneling` component, this is a **generic component** that runs as
+a long-lived daemon reacting to an MQTT notify topic — here `$aws/things/{thing}/jobs/notify-next`. It
+declares a soft dependency on the Greengrass nucleus (`>=2.0.0 <3.0.0`).
+
 ## Architecture
 
 | Module | Responsibility |
@@ -35,7 +39,7 @@ device defender, config shadow. This mirrors *only* the device client's Jobs fea
 | `jobs::model` | JSON shapes for the Jobs protocol + job-document parsing |
 | `jobs::topics` | reserved `$aws/things/{thing}/jobs/...` topic builders |
 | `jobs::engine` | the workflow state machine |
-| `handler` | allow-listed handler execution (spawn, timeout, capture, status map) |
+| `handler` | action execution: allow-listed `runHandler` + `runCommand`, timeout, capture, status map |
 | `transport` | the `JobsTransport` trait + a direct-MQTT impl (`rumqttc`) and an in-memory mock |
 
 The engine is transport-agnostic, so the whole workflow is unit-tested with a mock transport and fake
@@ -43,19 +47,60 @@ handler scripts — no network or AWS account required.
 
 ## Job document
 
-Two forms are accepted:
+Supports the `aws-iot-device-client` / **AWS managed job template** schema, with two action types.
+
+**`runHandler`** — run an allow-listed handler executable:
 
 ```jsonc
-// flat
-{ "operation": "my-handler.sh", "args": ["arg1", "arg2"] }
-
-// stepped (aws-iot-device-client style)
-{ "steps": [ { "action": { "input": { "handler": "my-handler.sh", "args": ["arg1"] } } } ] }
+{
+  "version": "1.0",
+  "steps": [{
+    "action": {
+      "type": "runHandler",
+      "input": { "handler": "download-file.sh", "args": ["https://…", "/opt/f"], "path": "" },
+      "runAsUser": ""
+    }
+  }]
+}
 ```
 
-The handler name must be a **bare file name** present in the configured allow-list directory. Names
-containing path separators or `..` are rejected. Exit `0` → `SUCCEEDED`; non-zero → `FAILED`; over the
-timeout → `TIMED_OUT`, with the reason and captured `stderr` reported in `statusDetails`.
+A flat convenience form is also accepted: `{ "operation": "my-handler.sh", "args": ["a"] }`.
+
+**`runCommand`** — run a comma-separated argv directly, no shell (the `AWS-Run-Command` template):
+
+```jsonc
+{ "steps": [{ "action": { "type": "runCommand",
+  "input": { "command": "systemctl,restart,my.service" }, "runAsUser": "root" } }] }
+```
+
+### AWS managed templates
+
+All AWS managed job templates are supported out of the box. `${aws:iot:parameter:…}` placeholders are
+substituted server-side by AWS, so the device receives concrete values. The bundled **AWS sample job
+handlers** (Apache-2.0) implement the device side:
+
+| Template | Action | Handler / command |
+|---|---|---|
+| `AWS-Download-File` | runHandler | `download-file.sh` |
+| `AWS-Install-Application` | runHandler | `install-packages.sh` |
+| `AWS-Remove-Application` | runHandler | `remove-packages.sh` |
+| `AWS-Start-Application` | runHandler | `start-services.sh` |
+| `AWS-Stop-Application` | runHandler | `stop-services.sh` |
+| `AWS-Restart-Application` | runHandler | `restart-services.sh` |
+| `AWS-Reboot` | runHandler | `reboot.sh` |
+| `AWS-Run-Command` | runCommand | provided command argv |
+
+### Execution & security
+
+- **runHandler** resolves the handler as a **bare file name** inside the handler directory (path
+  separators / `..` rejected). A `path` override is honored only if it's on the configured allow-list.
+  Following the device-client convention, the handler is invoked with `runAsUser` as its **first
+  argument** (empty when unset) and drops privileges itself (`sudo -u "$user"`).
+- **runCommand** runs argv directly (no shell → no injection). It may be restricted with
+  `COMMAND_ALLOW_LIST`. When the runner is root and `runAsUser` is set, it drops to that user's
+  uid/gid natively.
+- Exit `0` → `SUCCEEDED`; non-zero → `FAILED`; over the timeout → `TIMED_OUT`, with the reason and
+  captured `stderr` in `statusDetails`.
 
 ## Configuration (environment)
 
@@ -65,6 +110,8 @@ timeout → `TIMED_OUT`, with the reason and captured `stderr` reported in `stat
 | `HANDLER_DIR` | `/var/lib/nucleus-job-plugin/handlers` | allow-list directory of handlers |
 | `JOB_TIMEOUT_SECS` | `300` | default per-job handler timeout |
 | `INCLUDE_STDOUT` | *(off)* | `1`/`true` to include stdout in `statusDetails` |
+| `HANDLER_PATH_OVERRIDES` | *(none)* | comma-separated extra dirs a job `path` may use |
+| `COMMAND_ALLOW_LIST` | *(any)* | comma-separated allow-list for `runCommand` executables |
 | `IOT_ENDPOINT` | *(required for MQTT)* | `xxxx-ats.iot.<region>.amazonaws.com` |
 | `IOT_PORT` | `8883` | MQTT port |
 | `CERT_PATH` / `KEY_PATH` / `CA_PATH` | *(required for MQTT)* | device cert, key, Amazon Root CA |
@@ -80,9 +127,12 @@ publishes.
 
 ## Deploying as a Greengrass component
 
+The component (`dev.du7.nucleus-job-plugin`) is a generic component with a soft nucleus dependency.
 See [`greengrass/recipe.json`](greengrass/recipe.json) and
-[`greengrass/files/setup.sh`](greengrass/files/setup.sh). The recipe runs the binary as the component
-user and, for the direct-MQTT transport, you supply the device credentials via configuration/env.
+[`greengrass/files/setup.sh`](greengrass/files/setup.sh). The Install step installs the binary, creates
+the handler allow-list directory owned by the component user, and (by default) installs the bundled
+AWS sample job handlers so managed templates work immediately. For the direct-MQTT transport, supply
+the device credentials via the component configuration.
 
 ## License
 

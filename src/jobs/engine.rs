@@ -7,8 +7,8 @@
 use crate::error::{Error, Result};
 use crate::handler::HandlerRunner;
 use crate::jobs::model::{
-    DescribeResponse, ErrorResponse, HandlerAction, JobExecutionData, JobStatus,
-    NextJobExecutionChanged, StartNextRequest, UpdateRequest,
+    Action, DescribeResponse, ErrorResponse, JobExecutionData, JobStatus, NextJobExecutionChanged,
+    StartNextRequest, UpdateRequest,
 };
 use crate::jobs::topics::JobTopics;
 use crate::transport::{Incoming, JobsTransport};
@@ -122,7 +122,7 @@ impl<T: JobsTransport> Engine<T> {
         info!(job_id = %job.job_id, "picked up job");
 
         // Parse the handler action up front; a bad document fails the job.
-        let action = match HandlerAction::from_document(&job.job_document) {
+        let action = match Action::from_document(&job.job_document) {
             Ok(a) => a,
             Err(e) => {
                 warn!(job_id = %job.job_id, error = %e, "invalid job document");

@@ -31,6 +31,10 @@ futures = "0.3"
 # Optional transports.
 rumqttc = { version = "0.24", optional = true }
 
+[target.'cfg(unix)'.dependencies]
+# Resolve `runAsUser` names to uid/gid for privilege drop on Linux devices.
+uzers = "0.12"
+
 [dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "time", "sync", "io-util", "test-util"] }
 tempfile = "3"

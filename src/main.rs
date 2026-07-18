@@ -24,6 +24,8 @@ async fn main() -> Result<()> {
 
     let mut runner = HandlerRunner::new(cfg.handler_dir.clone(), cfg.default_timeout);
     runner.include_stdout = cfg.include_stdout;
+    runner.allowed_path_overrides = cfg.allowed_path_overrides.clone();
+    runner.command_allow_list = cfg.command_allow_list.clone();
 
     match cfg.transport {
         TransportKind::Mqtt => {

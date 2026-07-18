@@ -131,10 +131,12 @@ Device sets: `IN_PROGRESS` (on pickup), then `SUCCEEDED` or `FAILED` (or `REJECT
   "executionState": JobExecutionState /* present on VersionMismatch */ }
 ```
 
-## 6. Job document (device-client-compatible)
+## 6. Job document (device-client-compatible + AWS managed templates)
 
-The **job document** is an arbitrary JSON object defined by whoever creates the job. To interoperate
-with the `aws-iot-device-client` Jobs feature, accept its schema — representative fields:
+The **job document** is a JSON object. This runner supports the `aws-iot-device-client` Jobs schema,
+which is also what **AWS managed job templates** emit. There are two action **types**:
+
+### 6a. `runHandler` (most managed templates + custom handlers)
 
 ```json
 {
@@ -142,37 +144,91 @@ with the `aws-iot-device-client` Jobs feature, accept its schema — representat
   "steps": [
     {
       "action": {
-        "name": "my-handler",
+        "name": "Download-File",
         "type": "runHandler",
         "input": {
-          "handler": "my-handler.sh",     // executable name (must be in the allow-list dir)
-          "args": ["arg1", "arg2"],
-          "path": "default"                // handler dir; "default" = configured allow-list dir
+          "handler": "download-file.sh",   // executable file name (resolved in the handler dir)
+          "args": ["https://…", "/opt/f"], // positional args
+          "path": ""                        // OPTIONAL handler-dir override; empty => configured dir
         },
-        "runAsUser": "optional-user"
+        "runAsUser": ""                      // OPTIONAL user to drop to; empty => component user
       }
     }
   ]
 }
 ```
 
-> Confirm the exact device-client schema (field names `operation`/`handler`/`args`/`path`, the
-> default handler directory, `allowStdErr`/`includeStdOut`) from the device-client source/docs before
-> finalizing. Our own struct should be thin and documented; we control it. For our runner, a simpler
-> single-action document is also fine — keep parsing lenient.
+Also accepted (flat, non-managed convenience form): `{ "operation"|"handler": "h.sh", "args": [...] }`.
 
-Handler execution contract:
-- Only run handlers found in the configured **allow-list directory** (never an arbitrary path from
-  the job document).
-- Enforce a bounded timeout (job's `stepTimeoutInMinutes` or a configured default).
-- Capture stdout/stderr + exit code. Exit 0 → `SUCCEEDED`; non-zero/timeout → `FAILED`/`TIMED_OUT`,
-  with reason + captured stderr placed in `statusDetails`.
+### 6b. `runCommand` (the `AWS-Run-Command` template)
+
+```json
+{
+  "version": "1.0",
+  "steps": [
+    {
+      "action": {
+        "name": "Run-Command",
+        "type": "runCommand",
+        "input": {
+          "command": "sudo,systemctl,restart,my.service"  // COMMA-separated argv; commas in an
+                                                            // argument are escaped as "\\,"
+        },
+        "runAsUser": ""
+      }
+    }
+  ]
+}
+```
+
+`runCommand.input.command` is a **comma-separated argv list** (per the AWS template spec), NOT a shell
+string. Split on unescaped commas; unescape `\,` → `,`. Execute argv[0] with argv[1..] directly (no
+shell), so there is no shell-injection surface.
+
+### Parameter substitution
+
+Managed templates contain `${aws:iot:parameter:<name>}` placeholders (e.g. `downloadUrl`,
+`pathToHandler`, `runAsUser`). **AWS substitutes these server-side** before the document reaches the
+device, so the runner sees concrete values. Unset optional parameters arrive as **empty strings**
+(treat empty `path`/`runAsUser` as "unset").
+
+### AWS managed templates → handler scripts
+
+| Template | type | handler / command |
+|---|---|---|
+| `AWS-Download-File` | runHandler | `download-file.sh <downloadUrl> <filePath>` |
+| `AWS-Install-Application` | runHandler | `install-packages.sh <packages>` |
+| `AWS-Remove-Application` | runHandler | `remove-packages.sh <packages>` |
+| `AWS-Start-Application` | runHandler | `start-services.sh <services>` |
+| `AWS-Stop-Application` | runHandler | `stop-services.sh <services>` |
+| `AWS-Restart-Application` | runHandler | `restart-services.sh <services>` |
+| `AWS-Reboot` | runHandler | `reboot.sh` |
+| `AWS-Run-Command` | runCommand | the provided command argv |
+
+The `runHandler` scripts are the AWS "sample job handlers" (Apache-2.0, from `aws-iot-device-client`)
+and are shipped in `greengrass/files/handlers/` so managed templates work out of the box.
+
+### Execution contract
+
+- **runHandler**: resolve the handler as a **bare file name inside the handler directory** (the
+  configured allow-list dir, or a `path` override only when it is on the configured allow-list of
+  permitted directories). Reject names/paths containing `..` or separators that escape the dir.
+- **runCommand**: parse the comma-separated argv; run argv directly (no shell). The executable may be
+  subject to a configurable allow-list/`deny` policy.
+- **runAsUser** (both types): when the runner is running as root and `runAsUser` is non-empty, drop
+  privileges to that user's uid/gid for the child process (resolve via the passwd database). If the
+  runner is not root, `runAsUser` is ignored with a warning.
+- Enforce a bounded timeout (job's `stepTimeoutInMinutes` or the configured default).
+- Capture stdout/stderr + exit code. Exit 0 → `SUCCEEDED`; non-zero → `FAILED`; over budget →
+  `TIMED_OUT`. Put reason + captured stderr (and optionally stdout) in `statusDetails`.
 
 ## 7. Sources
 - Jobs MQTT API: https://docs.aws.amazon.com/iot/latest/developerguide/jobs-mqtt-api.html
 - Reserved topics: https://docs.aws.amazon.com/iot/latest/developerguide/reserved-topics.html
 - Devices & Jobs: https://docs.aws.amazon.com/iot/latest/developerguide/jobs-devices.html
 - Job document: https://docs.aws.amazon.com/iot/latest/developerguide/iot-jobs.html
+- AWS managed job templates: https://docs.aws.amazon.com/iot/latest/developerguide/job-templates-managed.html
+- Sample job handlers (Apache-2.0): https://github.com/awslabs/aws-iot-device-client/tree/main/sample-job-handlers
 - aws-iot-device-client (Apache-2.0) Jobs feature: https://github.com/awslabs/aws-iot-device-client
 - Nucleus Jobs reference (local Java clone): `~/reps/du7/aws-greengrass-nucleus`
   → `src/main/java/com/aws/greengrass/deployment/IotJobsHelper.java`

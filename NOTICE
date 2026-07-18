@@ -1,0 +1,22 @@
+nucleus-job-plugin
+Copyright 2026 eduelias
+
+This product includes software developed by third parties.
+
+--------------------------------------------------------------------------------
+AWS IoT Device Client sample job handlers
+--------------------------------------------------------------------------------
+
+The shell scripts under `greengrass/files/handlers/` (download-file.sh,
+install-packages.sh, remove-packages.sh, start-services.sh, stop-services.sh,
+restart-services.sh, reboot.sh) are copied unmodified from the AWS IoT Device
+Client project:
+
+    https://github.com/awslabs/aws-iot-device-client
+    Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+    Licensed under the Apache License, Version 2.0 (the "License").
+
+A copy of the Apache License 2.0 is provided in LICENSE-APACHE.
+
+This project is not affiliated with, endorsed by, or sponsored by Amazon.
+"AWS", "AWS IoT", and "Greengrass" are used descriptively/nominatively.

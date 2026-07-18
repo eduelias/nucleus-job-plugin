@@ -117,64 +117,125 @@ pub struct ErrorResponse {
     pub message: String,
 }
 
-/// The parsed handler action extracted from a job document.
+/// A parsed step action extracted from a job document.
 ///
-/// This runner supports a small, well-defined document shape compatible with the
-/// `aws-iot-device-client` Jobs "run handler" model. Two forms are accepted:
+/// Supports the `aws-iot-device-client` / AWS managed-template schema. Two action
+/// types are recognized:
 ///
-/// * a flat document: `{ "operation": "h.sh", "args": [..], "path": "default" }`
-/// * a stepped document: `{ "steps": [ { "action": { "input": { "handler": "h.sh", "args": [..] } } } ] }`
+/// * `runHandler` — run an allow-listed handler executable (most managed templates
+///   and custom handlers). Also accepts the flat convenience form
+///   `{ "operation"|"handler": "h.sh", "args": [..] }`.
+/// * `runCommand` — run a comma-separated argv directly (the `AWS-Run-Command`
+///   template).
+///
+/// Both carry an optional `run_as_user` (empty string means "unset").
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct HandlerAction {
-    /// Handler executable file name (looked up in the allow-list directory).
-    pub handler: String,
-    /// Arguments passed to the handler.
-    pub args: Vec<String>,
+pub struct Action {
+    /// The concrete work to perform.
+    pub kind: ActionKind,
+    /// User to drop privileges to before executing (empty/None => component user).
+    pub run_as_user: Option<String>,
 }
 
-impl HandlerAction {
-    /// Extract the handler action from an arbitrary job-document JSON value.
+/// The concrete action variant.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ActionKind {
+    /// Run an allow-listed handler executable.
+    RunHandler {
+        /// Handler executable file name (resolved inside the handler directory).
+        handler: String,
+        /// Positional arguments passed to the handler.
+        args: Vec<String>,
+        /// Optional handler-directory override (empty => configured handler dir).
+        path: Option<String>,
+    },
+    /// Run a command argv directly (no shell).
+    RunCommand {
+        /// The argv: `argv[0]` is the program, the rest are arguments.
+        argv: Vec<String>,
+    },
+}
+
+impl Action {
+    /// Extract the action from an arbitrary job-document JSON value.
     pub fn from_document(doc: &serde_json::Value) -> crate::error::Result<Self> {
         use crate::error::Error;
 
-        // Flat form: { "operation" | "handler": "name", "args": [...] }
+        // Flat convenience form: { "operation" | "handler": "name", "args": [...] }
         if let Some(name) = doc
             .get("operation")
             .or_else(|| doc.get("handler"))
             .and_then(|v| v.as_str())
         {
             return Ok(Self {
-                handler: name.to_string(),
-                args: parse_args(doc.get("args")),
+                kind: ActionKind::RunHandler {
+                    handler: name.to_string(),
+                    args: parse_args(doc.get("args")),
+                    path: opt_str(doc.get("path")),
+                },
+                run_as_user: opt_str(doc.get("runAsUser")),
             });
         }
 
-        // Stepped form: { "steps": [ { "action": { "input": { "handler", "args" } } } ] }
-        if let Some(step) = doc
+        // Stepped form: { "steps": [ { "action": { "type", "input", "runAsUser" } } ] }
+        let action = doc
             .get("steps")
             .and_then(|s| s.as_array())
             .and_then(|s| s.first())
-        {
-            let input = step
-                .get("action")
-                .and_then(|a| a.get("input"))
-                .ok_or_else(|| Error::InvalidJobDocument("steps[0].action.input missing".into()))?;
-            let name = input
-                .get("handler")
-                .or_else(|| input.get("operation"))
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| {
-                    Error::InvalidJobDocument("steps[0].action.input.handler missing".into())
-                })?;
-            return Ok(Self {
-                handler: name.to_string(),
-                args: parse_args(input.get("args")),
-            });
-        }
+            .and_then(|step| step.get("action"))
+            .ok_or_else(|| {
+                Error::InvalidJobDocument(
+                    "no `operation`/`handler` or `steps[].action` found".into(),
+                )
+            })?;
 
-        Err(Error::InvalidJobDocument(
-            "no `operation`/`handler` or `steps[].action.input.handler` found".into(),
-        ))
+        let input = action
+            .get("input")
+            .ok_or_else(|| Error::InvalidJobDocument("steps[0].action.input missing".into()))?;
+        let run_as_user = opt_str(action.get("runAsUser"));
+
+        // Dispatch on the action `type`; default to runHandler when absent.
+        let action_type = action.get("type").and_then(|v| v.as_str());
+        match action_type {
+            Some("runCommand") => {
+                let command = input
+                    .get("command")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        Error::InvalidJobDocument("runCommand action missing input.command".into())
+                    })?;
+                let argv = parse_command(command);
+                if argv.is_empty() {
+                    return Err(Error::InvalidJobDocument(
+                        "runCommand command is empty".into(),
+                    ));
+                }
+                Ok(Self {
+                    kind: ActionKind::RunCommand { argv },
+                    run_as_user,
+                })
+            }
+            Some("runHandler") | None => {
+                let handler = input
+                    .get("handler")
+                    .or_else(|| input.get("operation"))
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        Error::InvalidJobDocument("runHandler action missing input.handler".into())
+                    })?;
+                Ok(Self {
+                    kind: ActionKind::RunHandler {
+                        handler: handler.to_string(),
+                        args: parse_args(input.get("args")),
+                        path: opt_str(input.get("path")),
+                    },
+                    run_as_user,
+                })
+            }
+            Some(other) => Err(Error::InvalidJobDocument(format!(
+                "unsupported action type: {other:?}"
+            ))),
+        }
     }
 }
 
@@ -189,6 +250,41 @@ fn parse_args(v: Option<&serde_json::Value>) -> Vec<String> {
                 .collect()
         })
         .unwrap_or_default()
+}
+
+/// Read an optional string field, treating empty strings as unset.
+fn opt_str(v: Option<&serde_json::Value>) -> Option<String> {
+    v.and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
+}
+
+/// Split a `runCommand` comma-separated argv, honoring `\,` as an escaped comma.
+///
+/// Per the `AWS-Run-Command` template spec the command is a comma-separated list
+/// of argv tokens; a literal comma inside a token is escaped as `\,`.
+pub fn parse_command(command: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut cur = String::new();
+    let mut chars = command.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '\\' if chars.peek() == Some(&',') => {
+                cur.push(',');
+                chars.next();
+            }
+            ',' => {
+                out.push(std::mem::take(&mut cur));
+            }
+            other => cur.push(other),
+        }
+    }
+    out.push(cur);
+    // Drop leading/trailing whitespace on each token; keep empty interior tokens out.
+    out.into_iter()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect()
 }
 
 #[cfg(test)]
@@ -221,25 +317,114 @@ mod tests {
     #[test]
     fn handler_action_flat() {
         let doc = serde_json::json!({"operation": "h.sh", "args": ["a", "b"]});
-        let a = HandlerAction::from_document(&doc).unwrap();
-        assert_eq!(a.handler, "h.sh");
-        assert_eq!(a.args, vec!["a", "b"]);
+        let a = Action::from_document(&doc).unwrap();
+        assert_eq!(a.run_as_user, None);
+        match a.kind {
+            ActionKind::RunHandler {
+                handler,
+                args,
+                path,
+            } => {
+                assert_eq!(handler, "h.sh");
+                assert_eq!(args, vec!["a", "b"]);
+                assert_eq!(path, None);
+            }
+            other => panic!("expected RunHandler, got {other:?}"),
+        }
     }
 
     #[test]
-    fn handler_action_stepped() {
+    fn handler_action_stepped_managed_template() {
+        // Shape emitted by e.g. AWS-Download-File after server-side substitution.
         let doc = serde_json::json!({
-            "steps": [{"action": {"input": {"handler": "run.sh", "args": ["1"]}}}]
+            "version": "1.0",
+            "steps": [{
+                "action": {
+                    "name": "Download-File",
+                    "type": "runHandler",
+                    "input": {"handler": "download-file.sh", "args": ["https://x", "/opt/f"], "path": ""},
+                    "runAsUser": ""
+                }
+            }]
         });
-        let a = HandlerAction::from_document(&doc).unwrap();
-        assert_eq!(a.handler, "run.sh");
-        assert_eq!(a.args, vec!["1"]);
+        let a = Action::from_document(&doc).unwrap();
+        assert_eq!(a.run_as_user, None); // empty string => unset
+        match a.kind {
+            ActionKind::RunHandler {
+                handler,
+                args,
+                path,
+            } => {
+                assert_eq!(handler, "download-file.sh");
+                assert_eq!(args, vec!["https://x", "/opt/f"]);
+                assert_eq!(path, None); // empty path => configured dir
+            }
+            other => panic!("expected RunHandler, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn run_command_action() {
+        let doc = serde_json::json!({
+            "steps": [{
+                "action": {
+                    "type": "runCommand",
+                    "input": {"command": "systemctl,restart,my.service"},
+                    "runAsUser": "root"
+                }
+            }]
+        });
+        let a = Action::from_document(&doc).unwrap();
+        assert_eq!(a.run_as_user.as_deref(), Some("root"));
+        match a.kind {
+            ActionKind::RunCommand { argv } => {
+                assert_eq!(argv, vec!["systemctl", "restart", "my.service"]);
+            }
+            other => panic!("expected RunCommand, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn run_command_escaped_comma() {
+        assert_eq!(
+            parse_command(r"echo,a\,b,c"),
+            vec!["echo".to_string(), "a,b".to_string(), "c".to_string()]
+        );
+    }
+
+    #[test]
+    fn handler_with_path_override_and_user() {
+        let doc = serde_json::json!({
+            "steps": [{
+                "action": {
+                    "type": "runHandler",
+                    "input": {"handler": "h.sh", "path": "/opt/handlers"},
+                    "runAsUser": "ggc_user"
+                }
+            }]
+        });
+        let a = Action::from_document(&doc).unwrap();
+        assert_eq!(a.run_as_user.as_deref(), Some("ggc_user"));
+        match a.kind {
+            ActionKind::RunHandler { path, .. } => {
+                assert_eq!(path.as_deref(), Some("/opt/handlers"))
+            }
+            other => panic!("expected RunHandler, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn unsupported_action_type_is_error() {
+        let doc = serde_json::json!({
+            "steps": [{"action": {"type": "runOta", "input": {}}}]
+        });
+        assert!(Action::from_document(&doc).is_err());
     }
 
     #[test]
     fn handler_action_missing() {
         let doc = serde_json::json!({"foo": "bar"});
-        assert!(HandlerAction::from_document(&doc).is_err());
+        assert!(Action::from_document(&doc).is_err());
     }
 
     #[test]

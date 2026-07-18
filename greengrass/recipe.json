@@ -1,16 +1,25 @@
 {
   "RecipeFormatVersion": "2020-01-25",
-  "ComponentName": "io.github.eduelias.nucleus-job-plugin",
+  "ComponentName": "dev.du7.nucleus-job-plugin",
   "ComponentVersion": "0.1.0",
   "ComponentType": "aws.greengrass.generic",
-  "ComponentDescription": "Unofficial Rust runner for AWS IoT Jobs execution (community, not affiliated with Amazon).",
+  "ComponentDescription": "Unofficial Rust runner for AWS IoT Jobs execution, incl. AWS managed job templates (community, not affiliated with Amazon).",
   "ComponentPublisher": "eduelias",
+  "ComponentDependencies": {
+    "aws.greengrass.Nucleus": {
+      "VersionRequirement": ">=2.0.0 <3.0.0",
+      "DependencyType": "SOFT"
+    }
+  },
   "ComponentConfiguration": {
     "DefaultConfiguration": {
       "logLevel": "info",
       "handlerDir": "/var/lib/nucleus-job-plugin/handlers",
       "jobTimeoutSecs": "300",
       "includeStdout": "0",
+      "installSampleHandlers": "1",
+      "handlerPathOverrides": "",
+      "commandAllowList": "",
       "iotEndpoint": "",
       "iotPort": "8883",
       "certPath": "",
@@ -18,7 +27,7 @@
       "caPath": "",
       "accessControl": {
         "aws.greengrass.ipc.mqttproxy": {
-          "io.github.eduelias.nucleus-job-plugin:mqttproxy:1": {
+          "dev.du7.nucleus-job-plugin:mqttproxy:1": {
             "policyDescription": "Allow the runner to speak the reserved IoT Jobs topics for this thing.",
             "operations": [
               "aws.greengrass#PublishToIoTCore",
@@ -40,7 +49,7 @@
       "Lifecycle": {
         "Install": {
           "RequiresPrivilege": true,
-          "Script": "/usr/bin/bash {artifacts:path}/setup.sh {artifacts:path} {configuration:/handlerDir}"
+          "Script": "/usr/bin/bash {artifacts:path}/setup.sh {artifacts:path} {configuration:/handlerDir} {configuration:/installSampleHandlers}"
         },
         "Startup": {
           "Setenv": {
@@ -49,6 +58,8 @@
             "HANDLER_DIR": "{configuration:/handlerDir}",
             "JOB_TIMEOUT_SECS": "{configuration:/jobTimeoutSecs}",
             "INCLUDE_STDOUT": "{configuration:/includeStdout}",
+            "HANDLER_PATH_OVERRIDES": "{configuration:/handlerPathOverrides}",
+            "COMMAND_ALLOW_LIST": "{configuration:/commandAllowList}",
             "IOT_ENDPOINT": "{configuration:/iotEndpoint}",
             "IOT_PORT": "{configuration:/iotPort}",
             "CERT_PATH": "{configuration:/certPath}",

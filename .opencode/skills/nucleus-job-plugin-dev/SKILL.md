@@ -22,9 +22,16 @@ MQTT topics and JSON payloads (the source of truth — do not guess topic string
   - direct MQTT via `rumqttc` (device cert/key), and
   - (optionally, later) Greengrass IPC IoT Core pub/sub.
   Everything else (engine, model, handler) is transport-agnostic and unit-tested with a mock.
-- **Job execution** runs an **allow-listed handler**: the job document names a handler + args; the
-  runner only executes handlers found in a configured allow-list directory, with a timeout, mapping
-  exit 0 → SUCCEEDED and non-zero → FAILED (stderr/reason in `statusDetails`).
+- **Job execution** runs a parsed `Action` (`src/jobs/model.rs`):
+  - `runHandler` — an **allow-listed handler** in the configured directory (or an allow-listed `path`
+    override). Invoked device-client style: `runAsUser` is the handler's first arg; the script drops
+    privileges. Bare-name only; `..`/separators rejected.
+  - `runCommand` — a comma-separated argv run directly (no shell), optional executable allow-list,
+    native uid/gid drop when the runner is root.
+  Exit 0 → SUCCEEDED, non-zero → FAILED, over timeout → TIMED_OUT (reason/stderr in `statusDetails`).
+- **AWS managed templates** (`AWS-Download-File`, `AWS-Run-Command`, …) emit exactly these action
+  shapes; `${aws:iot:parameter:…}` placeholders are substituted server-side. Bundled sample handlers
+  live in `greengrass/files/handlers/` (Apache-2.0, see `NOTICE`).
 
 ## The job workflow (state machine)
 
