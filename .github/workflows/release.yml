@@ -10,23 +10,35 @@ permissions:
 
 jobs:
   build-and-release:
-    name: Build aarch64 binary and publish release
+    name: Build ${{ matrix.arch }} binary and publish release
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - arch: aarch64
+            target: aarch64-unknown-linux-gnu
+            cross: true
+          - arch: x86_64
+            target: x86_64-unknown-linux-gnu
+            cross: false
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install aarch64 cross toolchain
+      - name: Install cross toolchain (aarch64 only)
+        if: matrix.cross
         run: |
           sudo apt-get update
           sudo apt-get install -y gcc-aarch64-linux-gnu
-          rustup target add aarch64-unknown-linux-gnu
+
+      - name: Add Rust target
+        run: rustup target add ${{ matrix.target }}
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Build release binary (aarch64-unknown-linux-gnu)
+      - name: Build release binary (${{ matrix.target }})
         env:
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
-        run: cargo build --release --locked --all-features --target aarch64-unknown-linux-gnu
+        run: cargo build --release --locked --all-features --target ${{ matrix.target }}
 
       - name: Package artifacts
         run: |
@@ -34,26 +46,30 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
           STAGE="dist"
           mkdir -p "$STAGE/handlers"
-          cp target/aarch64-unknown-linux-gnu/release/nucleus-job-plugin "$STAGE/"
-          aarch64-linux-gnu-strip "$STAGE/nucleus-job-plugin" || true
+          cp "target/${{ matrix.target }}/release/nucleus-job-plugin" "$STAGE/"
+          if [ "${{ matrix.cross }}" = "true" ]; then
+            aarch64-linux-gnu-strip "$STAGE/nucleus-job-plugin" || true
+          else
+            strip "$STAGE/nucleus-job-plugin" || true
+          fi
           cp greengrass/files/setup.sh "$STAGE/"
           cp greengrass/files/handlers/*.sh "$STAGE/handlers/"
           cp recipe.json "$STAGE/recipe.json"
           ( cd "$STAGE" && zip -rq handlers.zip handlers && rm -rf handlers )
-          ( cd "$STAGE" && tar czf "../nucleus-job-plugin-${VERSION}-aarch64-linux.tar.gz" . )
+          ( cd "$STAGE" && tar czf "../nucleus-job-plugin-${VERSION}-${{ matrix.arch }}-linux.tar.gz" . )
           ls -la "$STAGE" ./*.tar.gz
 
-      - name: Create GitHub release
+      - name: Create/append GitHub release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            nucleus-job-plugin-*-aarch64-linux.tar.gz
+            nucleus-job-plugin-*-${{ matrix.arch }}-linux.tar.gz
           generate_release_notes: true
           body: |
             Unofficial Rust runner for AWS IoT Jobs execution as a Greengrass generic component.
 
-            The attached `*-aarch64-linux.tar.gz` contains the `aarch64` binary, `setup.sh`,
-            `handlers.zip` (AWS sample job handlers), and `recipe.json`. See the README for how to
-            publish/deploy the component (GDK or manual).
+            Attached `*-<arch>-linux.tar.gz` archives (aarch64 and x86_64) each contain the binary,
+            `setup.sh`, `handlers.zip` (AWS sample job handlers), and `recipe.json`. See the README for
+            how to deploy the component (the `examples/docker/` demo, GDK, or manual).
 
             > Unofficial — not affiliated with, endorsed by, or sponsored by Amazon.

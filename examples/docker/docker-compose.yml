@@ -1,0 +1,22 @@
+# docker-compose for the nucleus-job-plugin end-to-end demo.
+#
+# Runs the official AWS IoT Greengrass nucleus in a container with automatic
+# resource provisioning. You provide only AWS credentials (mounted read-only);
+# the installer creates the IoT thing, thing group, IAM token-exchange role, and
+# role alias on first start.
+#
+# The image `greengrass-nucleus:demo` is built locally by ./run-demo.sh from the
+# official AWS Greengrass Dockerfile (AWS does not publish a public image).
+#
+# See README.md. This creates billable AWS resources — run ./teardown.sh after.
+
+services:
+  greengrass:
+    image: greengrass-nucleus:demo
+    init: true
+    container_name: njp-greengrass-demo
+    volumes:
+      - ./greengrass-v2-credentials:/root/.aws/:ro
+    env_file: .env
+    ports:
+      - "8883:8883"

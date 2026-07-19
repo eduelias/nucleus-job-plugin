@@ -1,0 +1,4 @@
+# Never commit real credentials, resolved env, or demo run state.
+.env
+.demo-state
+greengrass-v2-credentials/credentials

@@ -139,14 +139,32 @@ handlers** (Apache-2.0) implement the device side:
 > core device (nucleus 2.17, aarch64) is delivered over IPC, runs the bundled handler, and reaches
 > `SUCCEEDED` in the cloud.
 
-## Try it locally (no AWS)
+## Try it — two ways
+
+**1. Instantly, with no AWS account (mock transport):**
 
 ```bash
 cargo run --example local_run
 ```
 
 Feeds a canned job through the mock transport, runs a temp handler, and prints what the engine
-publishes.
+publishes — zero cost, no credentials.
+
+**2. End to end against a real Greengrass nucleus (Docker, bring only AWS creds):**
+
+```bash
+cd examples/docker
+cp .env.example .env                                   # set AWS_REGION
+cp greengrass-v2-credentials/credentials.example \
+   greengrass-v2-credentials/credentials               # add your AWS keys
+./run-demo.sh                                          # provisions, deploys, runs a job
+./teardown.sh                                          # cleans up
+```
+
+Spins up the official Greengrass nucleus in Docker (auto-provisioned), deploys the plugin as a local
+component, creates an `AWS-Run-Command` IoT Job, and shows it reach `SUCCEEDED`. See
+[`examples/docker/`](examples/docker/) — note it **creates billable AWS resources**; always run the
+teardown.
 
 ## Deploying as a Greengrass component
 
