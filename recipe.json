@@ -28,8 +28,8 @@
               "aws.greengrass#SubscribeToIoTCore"
             ],
             "resources": [
-              "$aws/things/${iot:thingName}/jobs/*",
-              "$aws/things/${iot:thingName}/jobs/#"
+              "$aws/things/{iot:thingName}/jobs/*",
+              "$aws/things/{iot:thingName}/jobs/#"
             ]
           }
         }
@@ -46,7 +46,7 @@
           "RequiresPrivilege": true,
           "Script": "/usr/bin/bash {artifacts:path}/setup.sh {artifacts:path} {configuration:/handlerDir} {configuration:/installSampleHandlers} {artifacts:decompressedPath}/handlers/handlers"
         },
-        "Startup": {
+        "Run": {
           "RequiresPrivilege": true,
           "Setenv": {
             "RUST_LOG": "nucleus_job_plugin={configuration:/logLevel}",

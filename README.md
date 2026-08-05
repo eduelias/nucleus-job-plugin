@@ -175,7 +175,8 @@ allow-list directory owned by the component user, and (by default) install the b
 handlers so managed templates work immediately.
 
 Build, publish, and deploy with the [GDK CLI](https://docs.aws.amazon.com/greengrass/v2/developerguide/greengrass-development-kit-cli.html)
-(config in [`gdk-config.json`](gdk-config.json)):
+(config in [`gdk-config.json`](gdk-config.json)). Nothing in this repository is tied to a particular
+AWS account, region, or bucket — you supply those per invocation:
 
 ```bash
 # 1. Build: cross-compiles the aarch64 binary in a container and stages artifacts
@@ -183,12 +184,41 @@ Build, publish, and deploy with the [GDK CLI](https://docs.aws.amazon.com/greeng
 gdk component build
 
 # 2. Publish: uploads artifacts to S3 and creates the next component version.
-#    --bucket pins the existing artifact bucket (otherwise GDK appends -region-account).
-AWS_PROFILE=<profile> AWS_REGION=<region> gdk component publish --bucket <artifact-bucket>
+#    GDK does not read AWS_REGION, so the region must be passed explicitly.
+AWS_PROFILE=<profile> AWS_REGION=<region> greengrass/publish.sh
+
+#    ...or call GDK directly:
+AWS_PROFILE=<profile> gdk component publish --region <region>
 
 # 3. Deploy to a device (create-deployment + wait for RUNNING).
 AWS_PROFILE=<profile> AWS_REGION=<region> greengrass/deploy.sh <version> <thing-name>
 ```
+
+### Artifact bucket and device permissions
+
+By default GDK derives the bucket from the `publish.bucket` prefix in `gdk-config.json` as
+`<prefix>-<region>-<account>`, creating it if needed. If your organisation keeps Greengrass
+artifacts in a bucket with a different name, pass it verbatim — GDK uses `--bucket` as given and
+only appends `-<region>-<account>` to the *config* prefix:
+
+```bash
+AWS_REGION=<region> GDK_BUCKET=<artifact-bucket> greengrass/publish.sh
+```
+
+Whichever bucket you use, the core device's **token exchange role must grant `s3:GetObject` on it**,
+otherwise the deployment fails on the device with `S3 HeadObject returns 403 Access Denied` while the
+deployment itself still reports as progressing in the cloud.
+
+### Deploying alongside other components
+
+A Greengrass deployment defines the *complete* component set for its target, so deploying naively to
+a thing that already has other components would uninstall them. `greengrass/deploy.sh` therefore
+merges this component into the target's current deployment by default. Set `MERGE=0` to deploy only
+this component and remove everything else from that target. Components deployed to a *different*
+target (for example a thing group the device also belongs to) are never affected.
+
+Deploy to a thing group instead of a single thing with `TARGET_TYPE=thinggroup`, or pass a full IoT
+ARN as the target.
 
 The build runs in a container via `podman` by default (override with `CONTAINER_ENGINE=docker`). For
 the direct-MQTT transport instead of IPC, set `transport: mqtt` in the component configuration and

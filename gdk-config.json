@@ -13,8 +13,7 @@
         ]
       },
       "publish": {
-        "bucket": "greengrass-component-artifacts",
-        "region": "us-east-1"
+        "bucket": "greengrass-component-artifacts"
       }
     }
   },
