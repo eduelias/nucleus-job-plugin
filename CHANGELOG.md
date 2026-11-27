@@ -9,10 +9,13 @@ All notable changes to this project are documented here. The format is based on
 ### Fixed
 
 - **A job could stall the thing's queue until the runner restarted.** The engine claims a job id
-  before processing it so repeated `notify-next` deliveries are skipped. If publishing the
-  `IN_PROGRESS` update failed, the claim stayed, so every later delivery of that job was skipped
-  as already handled, and the jobs queued behind it never ran. The claim is now released when a
-  publish fails before the handler runs; once the handler has run, it stays (at most once).
+  before processing it so repeated `notify-next` deliveries are skipped. If a status publish
+  failed, the claim stayed, every later delivery of that job was skipped as already handled, and
+  the jobs queued behind it never ran. Now a publish failure before the handler runs releases the
+  claim, and a final status that fails to publish is kept and re-sent when the job comes back, so
+  the handler still runs at most once per run of the runner. Since AWS sends nothing after a lost
+  publish, the engine also re-requests `start-next` 30 s after a transport error, which hands the
+  stuck job back.
 - **Handler output over 1 KiB could panic the runner.** `statusDetails` truncation sliced at byte
   1024, which panics when that byte falls inside a multi-byte UTF-8 character (common with
   `from_utf8_lossy`'s `�`). It now cuts at the previous character boundary. Found by a Kani proof.

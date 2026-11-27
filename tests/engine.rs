@@ -203,3 +203,41 @@ async fn failed_in_progress_publish_does_not_strand_the_job() {
         .collect();
     assert_eq!(statuses, vec![r#""IN_PROGRESS""#, r#""SUCCEEDED""#]);
 }
+
+#[tokio::test]
+async fn failed_publish_for_invalid_document_is_retried() {
+    // A bad document is reported FAILED without running anything; if that publish
+    // is lost, the next delivery must report it again rather than skip the job.
+    let tmp = tempfile::tempdir().unwrap();
+    let (transport, handle) = MockTransport::new();
+    let runner = HandlerRunner::new(tmp.path().to_path_buf(), Duration::from_secs(5));
+    let engine = Engine::new(transport, THING, runner);
+
+    let topics = JobTopics::new(THING);
+    let h = handle.clone();
+    let notify = topics.notify_next();
+    tokio::spawn(async move {
+        let job = serde_json::json!({
+            "execution": {"jobId": "bad-2", "jobDocument": {"nope": true}, "status": "QUEUED"}
+        });
+        tokio::time::sleep(Duration::from_millis(40)).await;
+        h.fail_next_publishes(1);
+        h.inject(&notify, job.clone()).await;
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        h.inject(&notify, job).await;
+        tokio::time::sleep(Duration::from_millis(150)).await;
+    });
+
+    let _ = tokio::time::timeout(Duration::from_secs(1), engine.run()).await;
+
+    let update_topic = topics.update("bad-2");
+    let statuses: Vec<String> = handle
+        .published()
+        .iter()
+        .filter(|p| p.topic == update_topic)
+        .map(|p| {
+            serde_json::from_slice::<serde_json::Value>(&p.payload).unwrap()["status"].to_string()
+        })
+        .collect();
+    assert_eq!(statuses, vec![r#""FAILED""#]);
+}

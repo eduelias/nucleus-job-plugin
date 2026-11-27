@@ -122,9 +122,12 @@ Besides the tests, CI checks two kinds of proof:
   handler-name check are small enough that plain tests try every string up to 5–6 characters over
   the relevant alphabet; that covers longer inputs, in milliseconds, than Kani reaches in minutes.
 - **Lean** (`verification/lean`, `lake build`) models the engine's de-duplication over every delivery
-  order and proves a handler never runs twice for one job, and that a job whose first status publish
-  failed is retried rather than skipped. The model is hand-written, so it must be kept in step with
-  `Engine::process_job`.
+  order. Within one run of the runner it proves a handler never runs twice for one job, that a job
+  whose first status publish failed is run on its next delivery, and that a final status whose
+  publish failed is re-sent on the next delivery without running the handler again. After a restart
+  the runner forgets what it ran, and AWS hands back any job still `IN_PROGRESS`, so handlers must
+  tolerate a second run (the bundled `reboot.sh` relies on this). The model is hand-written, so it
+  must be kept in step with `Engine::process_job`.
 
 ## Configuration (environment)
 
