@@ -33,3 +33,19 @@ pub mod transport;
 pub use config::Config;
 pub use error::{Error, Result};
 pub use jobs::Engine;
+
+/// Every string of up to `max_len` chars over `alphabet`, for exhaustive tests of
+/// small pure functions (the parser and the handler-name check).
+#[cfg(test)]
+pub(crate) fn all_strings(alphabet: &[char], max_len: usize) -> Vec<String> {
+    let mut all = vec![String::new()];
+    let mut last = all.clone();
+    for _ in 0..max_len {
+        last = last
+            .iter()
+            .flat_map(|s| alphabet.iter().map(move |c| format!("{s}{c}")))
+            .collect();
+        all.extend(last.iter().cloned());
+    }
+    all
+}

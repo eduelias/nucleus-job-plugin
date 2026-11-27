@@ -45,6 +45,12 @@ impl<T: JobsTransport> Engine<T> {
         self.seen.lock().unwrap().insert(job_id.to_string())
     }
 
+    /// Undo a claim for a job whose handler has not run, so a later
+    /// `notify-next`/`start-next` retries it instead of skipping it forever.
+    fn release(&self, job_id: &str) {
+        self.seen.lock().unwrap().remove(job_id);
+    }
+
     /// Subscribe to the topics the engine listens on.
     pub async fn subscribe_all(&self) -> Result<()> {
         self.transport.subscribe(&self.topics.notify_next()).await?;
@@ -144,14 +150,18 @@ impl<T: JobsTransport> Engine<T> {
                 warn!(job_id = %job.job_id, error = %e, "invalid job document");
                 let mut details = BTreeMap::new();
                 details.insert("reason".to_string(), e.to_string());
-                self.update(&job, JobStatus::Failed, details).await?;
-                return Ok(());
+                return self
+                    .update(&job, JobStatus::Failed, details)
+                    .await
+                    .inspect_err(|_| self.release(&job.job_id));
             }
         };
 
-        // Mark in progress (best effort; version-conflict just logs).
+        // Mark in progress. If that publish fails the handler has not run, so release
+        // the claim; past this point the claim stays (at-most-once execution).
         self.update(&job, JobStatus::InProgress, BTreeMap::new())
-            .await?;
+            .await
+            .inspect_err(|_| self.release(&job.job_id))?;
 
         // Execute.
         let outcome = match self.runner.run(&action, None).await {

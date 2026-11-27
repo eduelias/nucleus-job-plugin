@@ -1,0 +1,5 @@
+name = "verification"
+defaultTargets = ["JobsEngine"]
+
+[[lean_lib]]
+name = "JobsEngine"

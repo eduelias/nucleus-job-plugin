@@ -160,6 +160,36 @@ async fn run_command_respects_allow_list() {
         run_as_user: None,
     };
     assert!(runner.run(&denied, None).await.is_err());
+    // A path whose file name is on the list is not the listed program.
+    let other_path = Action {
+        kind: ActionKind::RunCommand {
+            argv: vec!["/tmp/evil/echo".into()],
+        },
+        run_as_user: None,
+    };
+    assert!(runner.run(&other_path, None).await.is_err());
+}
+
+#[tokio::test]
+async fn long_multibyte_stderr_is_truncated_without_panic() {
+    // 1023 ASCII bytes then a 2-byte char: byte 1024 is not a char boundary.
+    let tmp = tempfile::tempdir().unwrap();
+    write_handler(
+        tmp.path(),
+        "noisy.sh",
+        "#!/bin/sh
+printf '%01023d' 0 >&2
+printf 'éééé' >&2
+exit 1
+",
+    );
+    let runner = HandlerRunner::new(tmp.path().to_path_buf(), Duration::from_secs(5));
+    let out = runner
+        .run(&run_handler("noisy.sh", vec![]), None)
+        .await
+        .unwrap();
+    assert_eq!(out.status, JobStatus::Failed);
+    assert!(out.details["stderr"].ends_with("…(truncated)"));
 }
 
 #[tokio::test]

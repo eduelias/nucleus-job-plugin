@@ -4,6 +4,33 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **A job could stall the thing's queue until the runner restarted.** The engine claims a job id
+  before processing it so repeated `notify-next` deliveries are skipped. If publishing the
+  `IN_PROGRESS` update failed, the claim stayed, so every later delivery of that job was skipped
+  as already handled, and the jobs queued behind it never ran. The claim is now released when a
+  publish fails before the handler runs; once the handler has run, it stays (at most once).
+- **Handler output over 1 KiB could panic the runner.** `statusDetails` truncation sliced at byte
+  1024, which panics when that byte falls inside a multi-byte UTF-8 character (common with
+  `from_utf8_lossy`'s `�`). It now cuts at the previous character boundary. Found by a Kani proof.
+- **The handler-name check accepted `.`.** It was harmless (the directory itself fails the
+  `is_file` check), but the check now means what it says: one plain file name. Found by Kani.
+
+### Changed
+
+- **`COMMAND_ALLOW_LIST` now matches the program exactly.** It used to accept any path whose file
+  name was listed, so with `ls` listed a job could run `/tmp/x/ls`, including a file an earlier job
+  had downloaded there. List full paths (`/usr/bin/ls`) if jobs call programs by path.
+
+### Added
+
+- A Kani proof for output truncation, exhaustive tests for the `runCommand` parser and the
+  handler-name check, and a Lean model of the engine's de-duplication (`verification/lean`). Kani
+  and Lean run in CI.
+
 ## [0.1.7]
 
 ### Fixed

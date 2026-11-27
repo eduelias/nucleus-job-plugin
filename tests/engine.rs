@@ -161,3 +161,45 @@ async fn same_job_delivered_twice_is_processed_once() {
         updates.len()
     );
 }
+
+#[tokio::test]
+async fn failed_in_progress_publish_does_not_strand_the_job() {
+    // If the IN_PROGRESS update cannot be published the handler has not run, so the
+    // next delivery of the same job must run it rather than skip it as "seen".
+    let tmp = tempfile::tempdir().unwrap();
+    write_handler(tmp.path(), "ok.sh", "#!/bin/sh\nexit 0\n");
+    let (transport, handle) = MockTransport::new();
+    let runner = HandlerRunner::new(tmp.path().to_path_buf(), Duration::from_secs(5));
+    let engine = Engine::new(transport, THING, runner);
+
+    let topics = JobTopics::new(THING);
+    let h = handle.clone();
+    let notify = topics.notify_next();
+    tokio::spawn(async move {
+        let job = serde_json::json!({
+            "execution": {
+                "jobId": "flaky-1", "jobDocument": {"operation": "ok.sh"},
+                "status": "QUEUED", "versionNumber": 1
+            }
+        });
+        tokio::time::sleep(Duration::from_millis(40)).await;
+        h.fail_next_publishes(1);
+        h.inject(&notify, job.clone()).await;
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        h.inject(&notify, job).await;
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    });
+
+    let _ = tokio::time::timeout(Duration::from_secs(2), engine.run()).await;
+
+    let update_topic = topics.update("flaky-1");
+    let statuses: Vec<String> = handle
+        .published()
+        .iter()
+        .filter(|p| p.topic == update_topic)
+        .map(|p| {
+            serde_json::from_slice::<serde_json::Value>(&p.payload).unwrap()["status"].to_string()
+        })
+        .collect();
+    assert_eq!(statuses, vec![r#""IN_PROGRESS""#, r#""SUCCEEDED""#]);
+}

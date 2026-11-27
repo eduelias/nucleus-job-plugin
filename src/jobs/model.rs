@@ -385,6 +385,40 @@ mod tests {
     }
 
     #[test]
+    fn parse_command_tokens_are_trimmed_and_nonempty_exhaustive() {
+        for s in crate::all_strings(&['a', ',', '\\', ' '], 6) {
+            let argv = parse_command(&s);
+            assert!(
+                argv.iter().all(|t| !t.is_empty() && t.trim() == t),
+                "{s:?} -> {argv:?}"
+            );
+            if !s.contains(',') {
+                let want: Vec<&str> = Some(s.trim())
+                    .filter(|t| !t.is_empty())
+                    .into_iter()
+                    .collect();
+                assert_eq!(argv, want, "{s:?}");
+            }
+        }
+    }
+
+    /// Escaping `,` as `\,` and joining with `,` round-trips. The format has no
+    /// escape for `\` itself, so a token other than the last may not end in one.
+    #[test]
+    fn parse_command_round_trips_exhaustive() {
+        let tokens = crate::all_strings(&['a', ',', '\\'], 3);
+        for a in tokens
+            .iter()
+            .filter(|t| !t.is_empty() && !t.ends_with('\\'))
+        {
+            for b in tokens.iter().filter(|t| !t.is_empty()) {
+                let enc = format!("{},{}", a.replace(',', "\\,"), b.replace(',', "\\,"));
+                assert_eq!(parse_command(&enc), [a.as_str(), b.as_str()], "{enc:?}");
+            }
+        }
+    }
+
+    #[test]
     fn run_command_escaped_comma() {
         assert_eq!(
             parse_command(r"echo,a\,b,c"),
