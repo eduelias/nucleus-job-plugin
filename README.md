@@ -115,7 +115,7 @@ handlers** (Apache-2.0) implement the device side:
 
 Besides the tests, CI checks two kinds of proof:
 
-- **Kani** (`cargo kani --no-default-features`) proves output truncation never panics and stays
+- **Kani** (`cargo kani --no-default-features --lib`) proves output truncation never panics and stays
   bounded for every string of up to 4 bytes mixing ASCII and a 2-byte character, at every cut
   point, including cuts that land inside the character. The harness
   is the `#[cfg(kani)] mod proofs` block in `src/handler.rs`. The `runCommand` parser and the
