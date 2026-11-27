@@ -105,10 +105,29 @@ handlers** (Apache-2.0) implement the device side:
   Following the device-client convention, the handler is invoked with `runAsUser` as its **first
   argument** (empty when unset) and drops privileges itself (`sudo -u "$user"`).
 - **runCommand** runs argv directly (no shell → no injection). It may be restricted with
-  `COMMAND_ALLOW_LIST`. When the runner is root and `runAsUser` is set, it drops to that user's
-  uid/gid natively.
+  `COMMAND_ALLOW_LIST`, which matches the program exactly as the job writes it (`ls` allows `ls`
+  through `PATH`, not `/tmp/x/ls`; list `/usr/bin/ls` to allow that path). When the runner is
+  root and `runAsUser` is set, it drops to that user's uid/gid natively.
 - Exit `0` → `SUCCEEDED`; non-zero → `FAILED`; over the timeout → `TIMED_OUT`, with the reason and
   captured `stderr` in `statusDetails`.
+
+### Verification
+
+Besides the tests, CI checks two kinds of proof:
+
+- **Kani** (`cargo kani --no-default-features --lib`) proves output truncation never panics and stays
+  bounded for every string of up to 4 bytes mixing ASCII and a 2-byte character, at every cut
+  point, including cuts that land inside the character. The harness
+  is the `#[cfg(kani)] mod proofs` block in `src/handler.rs`. The `runCommand` parser and the
+  handler-name check are small enough that plain tests try every string up to 5–6 characters over
+  the relevant alphabet; that covers longer inputs, in milliseconds, than Kani reaches in minutes.
+- **Lean** (`verification/lean`, `lake build`) models the engine's de-duplication over every delivery
+  order. Within one run of the runner it proves a handler never runs twice for one job, that a job
+  whose first status publish failed is run on its next delivery, and that a final status whose
+  publish failed is re-sent on the next delivery without running the handler again. After a restart
+  the runner forgets what it ran, and AWS hands back any job still `IN_PROGRESS`, so handlers must
+  tolerate a second run (the bundled `reboot.sh` relies on this). The model is hand-written, so it
+  must be kept in step with `Engine::process_job`.
 
 ## Configuration (environment)
 
@@ -120,7 +139,7 @@ handlers** (Apache-2.0) implement the device side:
 | `INCLUDE_STDOUT` | *(off)* | `1`/`true` to include stdout in `statusDetails` |
 | `TRANSPORT` | `ipc` | `ipc` (Greengrass IPC, recommended) or `mqtt` (direct MQTT) |
 | `HANDLER_PATH_OVERRIDES` | *(none)* | comma-separated extra dirs a job `path` may use |
-| `COMMAND_ALLOW_LIST` | *(any)* | comma-separated allow-list for `runCommand` executables |
+| `COMMAND_ALLOW_LIST` | *(any)* | comma-separated allow-list for `runCommand` programs (exact match) |
 | `IOT_ENDPOINT` | *(required for `mqtt`)* | `xxxx-ats.iot.<region>.amazonaws.com` |
 | `IOT_PORT` | `8883` | MQTT port (direct MQTT only) |
 | `MQTT_CLIENT_ID` | `{thing}-jobs` | MQTT client id (direct MQTT only); must differ from the nucleus's |

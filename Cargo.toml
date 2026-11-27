@@ -9,7 +9,7 @@ repository = "https://github.com/eduelias/nucleus-job-plugin"
 readme = "README.md"
 keywords = ["iot", "jobs", "greengrass", "mqtt", "aws"]
 categories = ["embedded", "network-programming"]
-exclude = [".github/", "greengrass/", "scripts/"]
+exclude = [".github/", "greengrass/", "scripts/", "verification/"]
 
 [features]
 # The core engine/model/handler are transport-agnostic and always available.
@@ -41,6 +41,9 @@ uzers = "0.12"
 [dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "time", "sync", "io-util", "test-util"] }
 tempfile = "3"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(kani)"] }
 
 [[bin]]
 name = "nucleus-job-plugin"

@@ -24,6 +24,7 @@ pub struct MockHandle {
     published: Arc<Mutex<Vec<Published>>>,
     subscribed: Arc<Mutex<Vec<String>>>,
     injector: Arc<Mutex<Option<mpsc::Sender<Incoming>>>>,
+    fail_publishes: Arc<Mutex<usize>>,
 }
 
 impl MockHandle {
@@ -35,6 +36,11 @@ impl MockHandle {
     /// All topics subscribed so far.
     pub fn subscribed(&self) -> Vec<String> {
         self.subscribed.lock().unwrap().clone()
+    }
+
+    /// Make the next `n` publishes fail with a transport error.
+    pub fn fail_next_publishes(&self, n: usize) {
+        *self.fail_publishes.lock().unwrap() = n;
     }
 
     /// Inject an incoming message to the engine.
@@ -85,6 +91,15 @@ impl JobsTransport for MockTransport {
     }
 
     async fn publish(&self, topic: &str, payload: Vec<u8>) -> Result<()> {
+        {
+            let mut fail = self.handle.fail_publishes.lock().unwrap();
+            if *fail > 0 {
+                *fail -= 1;
+                return Err(crate::error::Error::Transport(
+                    "mock publish failure".into(),
+                ));
+            }
+        }
         self.handle.published.lock().unwrap().push(Published {
             topic: topic.to_string(),
             payload,
